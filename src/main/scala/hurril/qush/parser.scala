@@ -7,14 +7,27 @@ import model._
 
 
 object GraphQlParser extends JavaTokenParsers {
-  def blockOpen = "{"
-  def blockClose = "}"
+  def blockOpen: Parser[String] = "{"
+  def blockClose: Parser[String] = "}"
 
   def argumentsOpen = "("
   def argumentsClose = ")"
 
   def listOpen: Parser[String] = "["
   def listClose: Parser[String] = "]"
+
+  def document = executableDefinition.* ^^ Document
+  def executableDefinition: Parser[ExecutableDefinition.T] = 
+    queryOperation ^^ ExecutableDefinition.Operation |
+    fragment       ^^ ExecutableDefinition.Fragment
+
+  def fragmentKeyword = "fragment"
+
+  def fragment = 
+    ((fragmentKeyword ~> ident) <~ "on") ~ ident ~ selectionSetBlock ^^ {
+    case name ~ onType ~ selectionSet =>
+      FragmentDefinition.Def(name, onType, selectionSet)
+  }
 
   def queryOperationType = "query"
 
@@ -65,10 +78,16 @@ object GraphQlParser extends JavaTokenParsers {
   def queryDefinition = selectObject ^^ QueryDefinition
 
   def selectionSet = selectObject | selectScalar
-  def selectObject: Parser[Selection.T] = 
-    (field <~ blockOpen) ~ selectionSet.* <~ blockClose ^^ {
-      case field ~ selectionSet => Selection.Object(field, selectionSet)
-    }
+  def selectObject: Parser[Selection.T] = field ~ selectionSetBlock ^^ {
+    case field ~ selectionSet => Selection.Object(field, selectionSet)
+  }
+
+  def selectionSetBlock = for {
+    _      <- blockOpen
+    selSet <- selectionSet.*
+    _      <- blockClose
+  } yield selSet
+
   def selectScalar = field ^^ Selection.Scalar
 
   def field: Parser[Field.T] = (ident <~ ":").? ~ aliaseeField ^^ {
@@ -110,9 +129,15 @@ object RunParser extends App {
     |    }
     |  }
     |}
+    |fragment someFields on SomeType {
+    |  name
+    |  someObject(some: $bar) {
+    |    withAField
+    |  }
+    |}
   """.stripMargin
 
-  val result = GraphQlParser.parseAll(GraphQlParser.queryOperation, source)
+  val result = GraphQlParser.parseAll(GraphQlParser.document, source)
 
   println(result)
 }
