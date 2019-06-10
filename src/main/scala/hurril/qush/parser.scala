@@ -71,7 +71,11 @@ object GraphQlParser extends JavaTokenParsers {
     }
   def selectScalar = field ^^ Selection.Scalar
 
-  def field: Parser[Field.T] = apply | select
+  def field: Parser[Field.T] = (ident <~ ":").? ~ aliaseeField ^^ {
+    case Some(alias) ~ field => Field.Aliased(alias, field)
+    case _ ~ field           => field
+  }
+  def aliaseeField = apply | select
   def select = ident ^^ Field.Select
   def apply = ident ~ arguments ^^ {
     case name ~ arguments => Field.Apply(name, arguments.toMap)
@@ -97,12 +101,12 @@ object GraphQlParser extends JavaTokenParsers {
 object RunParser extends App {
   val source = """
     |query Robban ($foo: String! $bar: [Int!]!) {
-    |  foo(id: 5) {
-    |    name
+    |  blom: foo(id: 5) {
+    |    rutabaga: name
     |  }
-    |  bar(quux: "hi") {
-    |    wibble {
-    |      lol
+    |  rojne: bar {
+    |    orrefors:wibble {
+    |      lol:lol
     |    }
     |  }
     |}
