@@ -8,7 +8,7 @@ object ExecutableDefinition {
   sealed trait T
   case class Operation(operation: OperationDefinition.T)
     extends T
-  case class Fragment(fragment: FragmentDefinition.T)
+  case class Fragment(fragment: FragmentDefinition)
     extends T
 }
 
@@ -39,13 +39,9 @@ case class Variable(name: String,
                inputType: TypeReference.T,
             defaultValue: Option[Value.T])
 
-object FragmentDefinition {
-  sealed trait T
-  case class Def(name: String, 
-               onType: String,
-         selectionSet: List[Selection.T])
-    extends T
-}
+case class FragmentDefinition(name: String, 
+                            onType: String,
+                      selectionSet: List[Selection.T])
 
 object Name {
   sealed trait T

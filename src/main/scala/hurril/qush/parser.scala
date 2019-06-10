@@ -23,29 +23,35 @@ object GraphQlParser extends JavaTokenParsers {
 
   def fragmentKeyword = "fragment"
 
-  def fragment = 
-    ((fragmentKeyword ~> ident) <~ "on") ~ ident ~ selectionSetBlock ^^ {
+  def fragment = fragmentPreamble ~ selectionSetBlock ^^ {
     case name ~ onType ~ selectionSet =>
-      FragmentDefinition.Def(name, onType, selectionSet)
+      FragmentDefinition(name, onType, selectionSet)
   }
+
+  def fragmentPreamble = ((fragmentKeyword ~> ident) <~ "on") ~ ident
 
   def queryOperationType = "query"
 
   def queryOperation = namedQuery | anonymousQuery
-  def namedQuery = for {
-    (name, vars) <- queryPreamble
-    query        <- queryEpilogue(name, vars)
-  } yield query
+  def namedQuery = 
+    queryPreamble flatMap (queryEpilogue _).tupled
+  
+  //for {
+  //  (name, vars) <- queryPreamble
+  //  query        <- queryEpilogue(name, vars)
+  //} yield query
   def anonymousQuery = queryEpilogue(Name.Unnamed, List.empty)
 
   def queryPreamble = queryOperationType ~> queryName ~ variables.? ^^ {
     case queryName ~ variables => queryName -> variables.sequence.flatten
   }
   def queryEpilogue(name: Name.T, 
-               variables: List[Variable]) = 
-    blockOpen ~> (queryDefinition.* <~ blockClose) ^^ { queries =>
-      OperationDefinition.Query(name, variables, queries)
-    }
+               variables: List[Variable]) = for {
+    _       <- blockOpen
+    queries <- queryDefinition.*
+    _       <- blockClose
+  } yield OperationDefinition.Query(name, variables, queries)
+
   def queryName: Parser[Name.T] = ident.? ^^ {
     case Some(name) => Name.Named(name)
     case _          => Name.Unnamed
@@ -77,18 +83,17 @@ object GraphQlParser extends JavaTokenParsers {
 
   def queryDefinition = selectObject ^^ QueryDefinition
 
-  def selectionSet = selectObject | selectScalar
+  def selectionSet = selectObject | selectScalar | fragmentSpread
   def selectObject: Parser[Selection.T] = field ~ selectionSetBlock ^^ {
     case field ~ selectionSet => Selection.Object(field, selectionSet)
   }
-
+  def selectScalar = field ^^ Selection.Scalar
   def selectionSetBlock = for {
     _      <- blockOpen
     selSet <- selectionSet.*
     _      <- blockClose
   } yield selSet
-
-  def selectScalar = field ^^ Selection.Scalar
+  def fragmentSpread = "..." ~> ident ^^ Selection.FragmentSpread
 
   def field: Parser[Field.T] = (ident <~ ":").? ~ aliaseeField ^^ {
     case Some(alias) ~ field => Field.Aliased(alias, field)
@@ -126,6 +131,7 @@ object RunParser extends App {
     |  rojne: bar {
     |    orrefors:wibble {
     |      lol:lol
+    |      ...someFields
     |    }
     |  }
     |}
